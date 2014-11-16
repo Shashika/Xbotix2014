@@ -1,5 +1,6 @@
 #define road 0
 
+// sensors
 #define  l1 (digitalRead(34) == road)
 #define  l2 (digitalRead(36) == road)
 #define  l3 (digitalRead(38) == road)
@@ -17,6 +18,7 @@
 #define  rUp   (digitalRead(46) == road)
 #define  rDown (digitalRead(44) == road)
 
+// motor
 #define leftMotorForwardPin 7
 #define leftMotorBackwardPin 5
 #define leftMotorPWMPin 6
@@ -25,6 +27,24 @@
 #define rightMotorBackwardPin 8
 #define rightMotorPWMPin 9
 
+// encoder
+#define leftEncPin 15
+#define rightEncPin 0
+#define leftEncNo 2
+#define rightEncNo 5
+
+int reCount = 0, leCount = 0;
+
+// sonar
+#define trigPin  13
+#define echoPin  12
+
+// sharp
+#define sharpThreshold 65
+#define leftSharpPin 15
+#define rightSharpPin 0
+
+// led
 #define ledYellow 47
 #define ledGreen 49
 #define ledRed 51
@@ -128,7 +148,90 @@ void rotateRight(int pwm){
 	leftMotorFoward(pwm);
 }
 
-/*Sensors*/
+/* Encoders */
+void rightMotorEncorderFunc() {
+	reCount++;
+}
+                                                                             
+void leftMotorEncorderFunc() {
+	leCount++;
+}
+
+void resetEncoderCounts() {
+	leCount = 0;
+	reCount = 0;
+}
+
+void printEncorderCounts() {
+	Serial.print(leCount);
+	Serial.print("   ");
+	Serial.print(reCount);
+	Serial.println();
+}
+
+/* Sonar */
+int sonarRead() {
+	int microSec = 0; 
+	digitalWrite(trigPin, LOW);
+	delayMicroseconds(5);
+	digitalWrite(trigPin, HIGH);
+	delayMicroseconds(10);
+	digitalWrite(trigPin, LOW);
+	delayMicroseconds(10);
+	while(digitalRead(echoPin) == 0) {
+		microSec++;
+		delayMicroseconds(1);
+		if(microSec > 300) {
+			return -1;
+		}
+	}
+	microSec = 0;
+	while(digitalRead(echoPin) == 1) {
+		microSec++;
+		delayMicroseconds(1);
+		if(microSec > 500) {
+			delayMicroseconds(5000); // reduce error values
+			break;
+		}
+	}
+	return microSec*0.112;
+}
+
+void printSonarValue() {
+	Serial.println(sonarRead());
+	delay(50);
+}
+
+/* sharp */
+int sharpRead(int pin) {
+	int tmp;
+	tmp = analogRead(pin);
+	if (tmp < 3)
+		return sharpThreshold; // invalid value
+
+	int value =  (6787.0 /((float)tmp - 3.0)) - 4.0;
+	if(value > sharpThreshold) {
+		value = sharpThreshold;
+	}
+	return value;
+}
+
+int leftShparpValue() {
+	return sharpRead(leftSharpPin);
+}
+
+int rightSharpValue() {
+	return sharpRead(rightSharpPin);
+}
+
+void printSharpValues() {
+	Serial.print(leftShparpValue());
+	Serial.print("    ");
+	Serial.println(rightSharpValue());
+	Serial.println();
+}
+
+/* IR Sensors*/
 int getDigitalValue(int sensorNumber){
 
 	if(sensorNumber == -5){
@@ -459,6 +562,19 @@ void setup()
 	 pinMode(ledGreen, OUTPUT);
 	 pinMode(ledRed, OUTPUT);
 	 pinMode(ledOrange, OUTPUT);
+
+	 // encoder
+	 attachInterrupt(leftEncNo, rightMotorEncorderFunc, RISING);
+	 attachInterrupt(rightEncNo, leftMotorEncorderFunc, RISING);
+
+	 // sonar
+	 pinMode(trigPin, OUTPUT);
+	 pinMode(echoPin, INPUT);
+
+	 // sharp
+	 pinMode(leftSharpPin, INPUT);
+	 pinMode(rightSharpPin, INPUT);
+
 }
 
 void loop()
