@@ -26,5 +26,8 @@
     <ClInclude Include="Visual Micro\.Xbotics2014.vsarduino.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Visual Micro\.Xbotix2014.vsarduino.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

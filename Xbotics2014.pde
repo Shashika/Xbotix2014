@@ -1,5 +1,15 @@
 #define road 0
 
+/*****For Tuning*******/
+
+#define leftRotateEncoderCount 63
+#define rightRotateEncoderCount 60
+
+#define rotate180EncoderCount 140
+
+#define forwardEncoderCountUntilWheels 34
+#define forwardEncoderHalfCountUntilWheels 12
+
 // sensors
 #define  l1 (digitalRead(34) == road)
 #define  l2 (digitalRead(36) == road)
@@ -17,6 +27,13 @@
 #define  lDown (digitalRead(50) == road)
 #define  rUp   (digitalRead(46) == road)
 #define  rDown (digitalRead(44) == road)
+
+// front sensor
+
+//#define frontSensorConstant (1000/12)
+#define frontSensorConstant (10000/12)
+#define frontSensorThreshold 75
+#define frontSensorPin 37
 
 // motor
 #define leftMotorForwardPin 7
@@ -40,8 +57,8 @@ int reCount = 0, leCount = 0;
 #define echoPin  12
 
 // sharp
-#define sharpThreshold 65
-#define leftSharpPin 15
+#define sharpThreshold 85
+#define leftSharpPin 13
 #define rightSharpPin 0
 
 // led
@@ -83,13 +100,13 @@ void rightMotorBackward(int pwm){
 	digitalWrite(rightMotorBackwardPin, HIGH);
 }
 
-void breakMotors(int time){
+void breakMotors(){
 
 	digitalWrite(leftMotorForwardPin, HIGH);
 	digitalWrite(leftMotorBackwardPin, HIGH);
 	digitalWrite(rightMotorForwardPin, HIGH);
 	digitalWrite(rightMotorBackwardPin, HIGH);
-	delay(time);
+	//delay(time);
 }
 
 void forward(int pwm){
@@ -146,6 +163,45 @@ void rotateRightWithOneMotor(int pwm){
 void rotateRight(int pwm){
 	rightMotorBackward(pwm);
 	leftMotorFoward(pwm);
+}
+
+void rotateLeft90(int pwm){
+	resetEncoderCounts();
+	while(reCount < leftRotateEncoderCount){
+		rotateLeft(pwm);
+	}
+	breakMotors();
+}
+
+void rotateRight90(int pwm){
+	resetEncoderCounts();
+	while(reCount < rightRotateEncoderCount){
+		rotateRight(pwm);
+	}
+	breakMotors();
+}
+
+void rotate180(int pwm){
+	resetEncoderCounts();
+	while(leCount < rotate180EncoderCount){
+		rotateRight(pwm);
+	}
+	breakMotors();
+}
+
+void forwardUntilWheels(int pwm){
+	resetEncoderCounts();
+	while(leCount < forwardEncoderCountUntilWheels){
+		forward(pwm);
+	}
+	breakMotors();
+}
+void forwardUntilWheelsHalf(int pwm){
+	resetEncoderCounts();
+	while(leCount < forwardEncoderHalfCountUntilWheels){
+		forward(pwm);
+	}
+	breakMotors();
 }
 
 /* Encoders */
@@ -216,7 +272,7 @@ int sharpRead(int pin) {
 	return value;
 }
 
-int leftShparpValue() {
+int leftSharpValue() {
 	return sharpRead(leftSharpPin);
 }
 
@@ -225,7 +281,7 @@ int rightSharpValue() {
 }
 
 void printSharpValues() {
-	Serial.print(leftShparpValue());
+	Serial.print(leftSharpValue());
 	Serial.print("    ");
 	Serial.println(rightSharpValue());
 	Serial.println();
@@ -322,6 +378,22 @@ bool panalOR(int v1, int v2, int v3, int v4, int v5, int v6, int v7, int v8, int
 	return false;
 }
 
+int noOfSensorsOnLine() {
+	int count = 0;
+	if(l5) count++;
+	if(l4) count++;
+	if(l3) count++;
+	if(l2) count++;
+	if(l1) count++;
+	if(m) count++;
+	if(r1) count++;
+	if(r2) count++;
+	if(r3) count++;
+	if(r4) count++;
+	if(r5) count++;
+	return count;
+}
+
 void printSensors(){
 
 	Serial.print( l5);
@@ -357,6 +429,42 @@ void printSensors(){
 	Serial.println();
 }
 
+int frontSensorValueInternal() {
+	digitalWrite(frontSensorPin,LOW);
+	int withoutLight = analogRead(0);
+
+	digitalWrite(frontSensorPin,HIGH);
+	int withLight = analogRead(0);
+
+	int distance = withLight - withoutLight;
+	return frontSensorConstant/sqrt(distance);
+}
+
+int frontSensorValue() {
+	int val = frontSensorValueInternal();
+	for(int i = 0; i < 2; ++i) {
+		int next = frontSensorValueInternal();
+		val = (val > next) ? val : next;
+	}
+	return val;
+}
+
+void printFrontSensor() {
+	digitalWrite(frontSensorPin,LOW);
+	int withoutLight = analogRead(0);
+
+	digitalWrite(frontSensorPin,HIGH);
+	int withLight = analogRead(0);
+
+	int distance = withLight - withoutLight;
+
+	Serial.print(withoutLight);
+	Serial.print("    ");
+	Serial.print(withLight);
+	Serial.print("        ");
+	Serial.println(frontSensorConstant/sqrt(distance));
+}
+
 /* line following*/
 
 int getCurrentError(){
@@ -386,17 +494,7 @@ int getCurrentError(){
 }
 
 
-void sectionB(){
-
-	if(rUp || rDown){
-		forward(150);
-		delayMicroseconds(500000);
-		yellowON(-1);
-		breakMotors(2000);
-	}
-}
-
-
+int secAJunctionCount = 0;
 void linefollow(int pwm) {
 
 	int multipler  = 1;
@@ -412,18 +510,6 @@ void linefollow(int pwm) {
 		else {
 			rotateLeft(pwm);
 		}
-	}
-	else if(isJunction()){
-		breakMotors(0);
-		redON(2000);
-	}
-	else if(isAtoBJunction()){
-		breakMotors(0);
-		greenON(5000);
-		
-		//delayMicroseconds(1000000);
-		//delay(2000);
-		//turnLeft(0, 0);
 	}
 	else if(currentError * currentError < errorThreshold * errorThreshold) {
 		leftPWM = constrain(leftPWM, 0, 255);
@@ -441,18 +527,7 @@ void linefollow(int pwm) {
 	}
 	if(( l4 ||  r4) && !( l4 &&  r4)) {
 		previousError =  r4 ? 1 : -1;
-	}
-	Serial.println(previousError);
-
-
-
-	/*Serial.print(leftPWM);
-	Serial.print(" ####### ");
-	Serial.print(rightPWM);*/
-	/*Serial.print(leftError);
-	Serial.print(" ####### ");
-	Serial.print(rightError);
-	Serial.println();*/
+	}	
 }
 
 void blinkLEDs(){
@@ -539,6 +614,9 @@ void setup()
 	pinMode(rightMotorBackwardPin, OUTPUT);
 	pinMode(rightMotorPWMPin, OUTPUT);
 
+	pinMode(frontSensorPin, OUTPUT);
+
+
 	 pinMode(22, INPUT);   
 	 pinMode(24, INPUT);   
 	 pinMode(26, INPUT);   
@@ -577,19 +655,118 @@ void setup()
 
 }
 
+void regionA(int pwm) {
+	for(int i = 0; i < 3; ++i) {
+		while(!isAtoBJunction()) {
+			linefollow(pwm);
+		}
+		while(isAtoBJunction()) {
+			linefollow(pwm);
+		}
+		if(i == 0) {
+			orangeON(-1);
+		}
+		else if(i == 1) {
+			orangeOFF(-1);
+			redON(-1);
+		}
+		else if(i == 2){
+			greenON(-1);
+			redOFF(-1);
+		}
+	}
+
+	int sharpDistance = sharpThreshold;
+	bool highError = true;
+	do {
+		linefollow(150);
+		sharpDistance = leftSharpValue();
+		int error = getCurrentError();
+		highError = (error * error > 30 * 30);
+	} while(sharpDistance > 51 || sharpDistance == 0 || highError);
+
+	breakMotors();
+	delay(1000);
+	rotateLeft90(150);
+	breakMotors();
+	delay(1000);
+	// searching for line in region B
+	resetEncoderCounts();
+	while(leCount < 30) {
+		forward(pwm);
+	}
+	breakMotors();
+	delay(1000);
+	while(noOfSensorsOnLine() == 0) {
+		forward(pwm);
+	}
+	breakMotors();
+	delay(2000);
+	return;	
+}
+
+void regionB(int pwm) {
+	while(1) {
+		linefollow(pwm);
+
+		if((rUp || rDown) && panalOR(-1, -1, -1, 1, 1, 1, 1, 1, -1, -1, -1)) {
+			breakMotors();
+			//delay(1000);
+			forwardUntilWheels(pwm);
+			breakMotors();
+			//delay(1000);
+			rotateRight90(pwm);
+			breakMotors();
+			//delay(2000);
+		}
+		Serial.println(frontSensorValue());
+		if(frontSensorValue() < frontSensorThreshold) {
+			breakMotors();
+			return;
+			//Serial.println(frontSensorValue());
+		}
+	}
+}
+
+void dropBoxNFinish(int pwm) {
+	delay(100);
+	while(frontSensorValue() < frontSensorThreshold) {
+		linefollow(pwm);
+	}
+	breakMotors();
+	delay(500);
+
+	rotate180(pwm);
+	breakMotors();
+	delay(500);
+
+	resetEncoderCounts();
+	while(leCount < 100) {
+		linefollow(pwm);
+	}	
+	breakMotors();
+	delay(3000);
+}
+
+void proceed() {
+	int pwm = 200;
+	regionA(pwm);
+	regionB(pwm);
+	breakMotors();
+	delay(2000);
+	dropBoxNFinish(200);
+	breakMotors();
+	delay(2000);
+	while(1) {
+		breakMotors();
+	}
+}
+
 void loop()
 {
-	delay(500);
-	while(1) {
-		linefollow(150);
-		sectionB();
-		//leftMotorFoward(0);
-		//rightMotorForward(250);
-		//printSensors();
 
-		//leftMotorFoward(100);
-		//rightMotorForward(200);
-			//forward(150);
-	}
-	//blinkLEDs();
+	//proceed();
+	Serial.println(sharpRead(13));
+	delay(100);
+	
 }
