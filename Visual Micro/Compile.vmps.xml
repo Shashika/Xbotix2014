@@ -6,7 +6,7 @@
     </Platform>
     <VCCodeModel>
       <VCCodeMacros>
-        <VCCodeMacro Name="road" Value="0" />
+        <VCCodeMacro Name="road" Value="1" />
         <VCCodeMacro Name="ARDUINO" Value="10" />
         <VCCodeMacro Name="ARDUINO" Value="10" />
         <VCCodeMacro Name="__AVR_ATmega2560__" />

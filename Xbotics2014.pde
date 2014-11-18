@@ -1,4 +1,4 @@
-#define road 0
+#define road 1
 
 /*****For Tuning*******/
 
@@ -28,12 +28,15 @@
 #define  rUp   (digitalRead(46) == road)
 #define  rDown (digitalRead(44) == road)
 
-// front sensor
+// section A
+#define a2BJunctionThreshold 30
 
-//#define frontSensorConstant (1000/12)
+// front sensor
 #define frontSensorConstant (10000/12)
 #define frontSensorThreshold 75
-#define frontSensorPin 37
+#define frontSensorPin 35
+#define frontSensorOutputPin 7
+
 
 // motor
 #define leftMotorForwardPin 7
@@ -60,6 +63,7 @@ int reCount = 0, leCount = 0;
 #define sharpThreshold 85
 #define leftSharpPin 13
 #define rightSharpPin 0
+#define sharpBoxThreshold 40
 
 // led
 #define ledYellow 47
@@ -191,7 +195,7 @@ void rotate180(int pwm){
 
 void forwardUntilWheels(int pwm){
 	resetEncoderCounts();
-	while(leCount < forwardEncoderCountUntilWheels){
+	while(reCount < forwardEncoderCountUntilWheels){
 		forward(pwm);
 	}
 	breakMotors();
@@ -259,7 +263,7 @@ void printSonarValue() {
 }
 
 /* sharp */
-int sharpRead(int pin) {
+int sharpReadInternal(int pin) {
 	int tmp;
 	tmp = analogRead(pin);
 	if (tmp < 3)
@@ -272,6 +276,20 @@ int sharpRead(int pin) {
 	return value;
 }
 
+int sharpRead(int pin) {
+	int cnt = 0;
+	int correctCounts = 0;
+	for(int i = 0; i < 20; ++i) {
+		int read = sharpReadInternal(pin);
+		if(read > 0) {
+			correctCounts++;
+			cnt += read;
+		}
+	}
+	if(correctCounts == 0) return 0;
+	return (cnt / correctCounts);
+}
+
 int leftSharpValue() {
 	return sharpRead(leftSharpPin);
 }
@@ -281,10 +299,7 @@ int rightSharpValue() {
 }
 
 void printSharpValues() {
-	Serial.print(leftSharpValue());
-	Serial.print("    ");
-	Serial.println(rightSharpValue());
-	Serial.println();
+	Serial.println(leftSharpValue());
 }
 
 /* IR Sensors*/
@@ -342,7 +357,10 @@ bool isJunction(){
 bool isAtoBJunction(){
 
 	if( panalAND(-1, -1, 1, 1, -1,   -1,    -1, -1, -1, 1, 1) || panalAND(-1, 1, 1, -1, -1,   -1,    -1, -1, 1, 1, -1) ||
-			panalAND(1, 1, -1, -1, -1,   -1,    -1, 1, 1, -1, -1) ){
+			panalAND(1, 1, -1, -1, -1,   -1,    -1, 1, 1, -1, -1)  ||
+			(panalAND(1, 1, -1, -1, -1,   -1,    -1, -1, -1, -1, -1) &&  (rUp || rDown)) ||
+			(lUp || lDown) && (panalAND(-1, -1, -1, -1, -1,   -1,    -1, -1, -1, 1, 1))
+			){
 		return true;
 	}
 	return false;
@@ -431,10 +449,10 @@ void printSensors(){
 
 int frontSensorValueInternal() {
 	digitalWrite(frontSensorPin,LOW);
-	int withoutLight = analogRead(0);
+	int withoutLight = analogRead(frontSensorOutputPin);
 
 	digitalWrite(frontSensorPin,HIGH);
-	int withLight = analogRead(0);
+	int withLight = analogRead(frontSensorOutputPin);
 
 	int distance = withLight - withoutLight;
 	return frontSensorConstant/sqrt(distance);
@@ -451,10 +469,10 @@ int frontSensorValue() {
 
 void printFrontSensor() {
 	digitalWrite(frontSensorPin,LOW);
-	int withoutLight = analogRead(0);
+	int withoutLight = analogRead(frontSensorOutputPin);
 
 	digitalWrite(frontSensorPin,HIGH);
-	int withLight = analogRead(0);
+	int withLight = analogRead(frontSensorOutputPin);
 
 	int distance = withLight - withoutLight;
 
@@ -660,6 +678,10 @@ void regionA(int pwm) {
 		while(!isAtoBJunction()) {
 			linefollow(pwm);
 		}
+		resetEncoderCounts();
+		while(reCount < a2BJunctionThreshold) {
+			linefollow(pwm);
+		}
 		while(isAtoBJunction()) {
 			linefollow(pwm);
 		}
@@ -683,7 +705,7 @@ void regionA(int pwm) {
 		sharpDistance = leftSharpValue();
 		int error = getCurrentError();
 		highError = (error * error > 30 * 30);
-	} while(sharpDistance > 51 || sharpDistance == 0 || highError);
+	} while(sharpDistance > sharpBoxThreshold || sharpDistance == 0 || highError);
 
 	breakMotors();
 	delay(1000);
@@ -711,19 +733,17 @@ void regionB(int pwm) {
 
 		if((rUp || rDown) && panalOR(-1, -1, -1, 1, 1, 1, 1, 1, -1, -1, -1)) {
 			breakMotors();
-			//delay(1000);
+			delay(100);
 			forwardUntilWheels(pwm);
 			breakMotors();
-			//delay(1000);
+			delay(100);
 			rotateRight90(pwm);
 			breakMotors();
-			//delay(2000);
+			delay(100);
 		}
-		Serial.println(frontSensorValue());
 		if(frontSensorValue() < frontSensorThreshold) {
 			breakMotors();
 			return;
-			//Serial.println(frontSensorValue());
 		}
 	}
 }
@@ -764,9 +784,10 @@ void proceed() {
 
 void loop()
 {
-
-	//proceed();
-	Serial.println(sharpRead(13));
-	delay(100);
-	
+	proceed();
+	//printSharpValues();
+	//leftSharpValue();
+	//linefollow(200);
+	//delay(300);
+	//regionA(200);
 }
