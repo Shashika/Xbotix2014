@@ -2,13 +2,17 @@
 
 /*****For Tuning*******/
 
-#define leftRotateEncoderCount 63
+#define leftRotateEncoderCount 63    
 #define rightRotateEncoderCount 60
 
 #define rotate180EncoderCount 140
 
 #define forwardEncoderCountUntilWheels 34
 #define forwardEncoderHalfCountUntilWheels 12
+
+#define withoutFrontBoxDetectLineFollowEncCount 400
+
+#define forwardEncoderCountUntilSensorPanel  20
 
 // sensors
 #define  l1 (digitalRead(34) == road)
@@ -33,7 +37,10 @@
 
 // front sensor
 #define frontSensorConstant (10000/12)
-#define frontSensorThreshold 75
+
+#define frontSensorThreshold 100
+#define frontSensorThresholdHigh 120
+
 #define frontSensorPin 35
 #define frontSensorOutputPin 7
 
@@ -206,6 +213,13 @@ void forwardUntilWheelsHalf(int pwm){
 		forward(pwm);
 	}
 	breakMotors();
+}
+void forwardUntilEncCount(int pwm,int count){
+	resetEncoderCounts();
+	while(leCount < count){
+		forward(pwm);
+	}
+	//breakMotors();
 }
 
 /* Encoders */
@@ -511,8 +525,6 @@ int getCurrentError(){
 	return currentError;
 }
 
-
-int secAJunctionCount = 0;
 void linefollow(int pwm) {
 
 	int multipler  = 1;
@@ -674,7 +686,7 @@ void setup()
 }
 
 void regionA(int pwm) {
-	for(int i = 0; i < 3; ++i) {
+	for(int i = 0; i < 4; ++i) {
 		while(!isAtoBJunction()) {
 			linefollow(pwm);
 		}
@@ -700,83 +712,142 @@ void regionA(int pwm) {
 
 	int sharpDistance = sharpThreshold;
 	bool highError = true;
+
+	bool search =true;
 	do {
 		linefollow(150);
-		sharpDistance = leftSharpValue();
-		int error = getCurrentError();
-		highError = (error * error > 30 * 30);
+		if(search){
+			sharpDistance = leftSharpValue();
+			int error = getCurrentError();
+			highError = (error * error > 30 * 30);
+		}
+		if(isAtoBJunction()){
+			search = !search;
+			breakMotors();
+			delay(100);
+			rotate180(pwm);
+			breakMotors();
+			delay(100);
+		}
+
 	} while(sharpDistance > sharpBoxThreshold || sharpDistance == 0 || highError);
 
 	breakMotors();
-	delay(1000);
+	delay(100);
 	rotateLeft90(150);
 	breakMotors();
-	delay(1000);
+	delay(100);
 	// searching for line in region B
 	resetEncoderCounts();
 	while(leCount < 30) {
 		forward(pwm);
 	}
-	breakMotors();
-	delay(1000);
 	while(noOfSensorsOnLine() == 0) {
 		forward(pwm);
 	}
 	breakMotors();
-	delay(2000);
+	delay(100);
+	greenOFF(-1);
+	yellowON(-1);
 	return;	
 }
 
-void regionB(int pwm) {
-	while(1) {
+void linefollowUntilBox(int pwm){
+	while(1){
 		linefollow(pwm);
+		if (frontSensorValue() < frontSensorThreshold) {
+			breakMotors();
+			redON(-1);
+			return;
+		}
+	}
+}
+
+
+void regionB(int pwm) {
+	
+	resetEncoderCounts();
+	while(reCount < withoutFrontBoxDetectLineFollowEncCount){
+		linefollow(pwm);
+	}
+	yellowOFF(-1);
+
+	while(1) {
+
+		linefollow(pwm);
+
+		if (frontSensorValue() < frontSensorThreshold) {
+			breakMotors();
+			redON(-1);
+			return;
+		}
 
 		if((rUp || rDown) && panalOR(-1, -1, -1, 1, 1, 1, 1, 1, -1, -1, -1)) {
 			breakMotors();
 			delay(100);
-			forwardUntilWheels(pwm);
+
+			forwardUntilEncCount(pwm,forwardEncoderCountUntilSensorPanel);
+						
+			if( (lUp && lDown) && panalAND(-1, -1, 1, 1, 1, 1, 1, 1, -1, -1, -1) && (rUp && rDown)) {
+				greenON(-1);
+				breakMotors();
+				delay(100);
+				rotate180(pwm);
+				breakMotors();
+				delay(100);
+
+				linefollowUntilBox(pwm);
+				return;
+			}
+			forwardUntilEncCount(pwm,forwardEncoderCountUntilWheels - forwardEncoderCountUntilSensorPanel);
 			breakMotors();
 			delay(100);
 			rotateRight90(pwm);
 			breakMotors();
 			delay(100);
 		}
-		if(frontSensorValue() < frontSensorThreshold) {
-			breakMotors();
-			return;
-		}
+
 	}
 }
 
-void dropBoxNFinish(int pwm) {
-	delay(100);
-	while(frontSensorValue() < frontSensorThreshold) {
-		linefollow(pwm);
+void dropBoxNFinish(int pwmhigh,int pwmlow) {
+
+	//drop box and stop
+	while(frontSensorValue() < frontSensorThresholdHigh) {
+		linefollow(pwmlow);
 	}
 	breakMotors();
 	delay(500);
 
-	rotate180(pwm);
+	redOFF(-1);
+
+	//rotate 180
+	rotate180(pwmhigh);
 	breakMotors();
 	delay(500);
 
-	resetEncoderCounts();
-	while(leCount < 100) {
-		linefollow(pwm);
-	}	
-	breakMotors();
-	delay(3000);
+	//go to finish
+	while (true)
+	{
+		linefollow(pwmhigh);
+		if( (lUp && lDown) && panalAND(-1, -1, 1, 1, 1, 1, 1, 1, -1, -1, -1) && (rUp && rDown)) {
+			breakMotors();
+			delay(500);
+			return;
+		}
+	}
+	
 }
 
 void proceed() {
 	int pwm = 200;
+	int dropboxpwm = 125;
 	regionA(pwm);
 	regionB(pwm);
 	breakMotors();
-	delay(2000);
-	dropBoxNFinish(200);
-	breakMotors();
-	delay(2000);
+	delay(1000);
+	dropBoxNFinish(pwm,dropboxpwm);
+
 	while(1) {
 		breakMotors();
 	}
@@ -785,9 +856,5 @@ void proceed() {
 void loop()
 {
 	proceed();
-	//printSharpValues();
-	//leftSharpValue();
-	//linefollow(200);
-	//delay(300);
-	//regionA(200);
+	
 }
